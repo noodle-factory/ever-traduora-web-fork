@@ -1,17 +1,17 @@
-version: '3.7'
+version: '3'
 
 services:
 
-  traduora:
-    image: everco/ever-traduora:latest
-    container_name: traduora
+  ever-traduora-web:
+    image: nf-ever-traduora-web:latest
+    container_name: ever-traduora-web
     build:
       context: .
       dockerfile: Dockerfile
       args:
           NODE_ENV: ${NODE_ENV:-development}
     ports:
-     - "8080:8080"
+     - "8096:8080"
     environment:
       TR_DB_TYPE: mysql
       TR_DB_USER: tr
@@ -19,6 +19,7 @@ services:
       TR_DB_DATABASE: tr_dev
       TR_DB_HOST: mysqldb
       TR_DB_PORT: 3306
+      NF_BASE_URL: http://locales-api:8080/api/v1
       NODE_ENV: ${NODE_ENV:-development}    
     entrypoint: './docker-entrypoint.compose.sh'
     restart: on-failure
@@ -27,7 +28,7 @@ services:
     links:
       - mysqldb:${TR_DB_HOST:-mysqldb}      
     networks:
-      - overlay
+      - noodle-factory
 
   mysqldb:
     image: mysql:5.7
@@ -42,8 +43,8 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_ALLOW_EMPTY_PASSWORD: 'true'
     networks:
-      - overlay
+      - noodle-factory
 
 networks:
-  overlay:
-      driver: bridge
+  noodle-factory:
+    driver: bridge
