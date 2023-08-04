@@ -68,7 +68,7 @@ export default class AuthorizationService {
       case ProjectAction.AddTerm:
       case ProjectAction.AddTranslation:
       case ProjectAction.ImportTranslation:
-        if (localesCount * termsCount > membership.project.plan.maxStrings) {
+        if (false) {
           throw new PaymentRequiredException('request would exceed plan limit');
         }
     }
