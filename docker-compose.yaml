@@ -27,7 +27,7 @@ services:
     links:
       - mysqldb:${TR_DB_HOST:-mysqldb}      
     networks:
-      - overlay
+      - noodle-factory
 
   mysqldb:
     image: mysql:5.7
@@ -42,8 +42,8 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_ALLOW_EMPTY_PASSWORD: 'true'
     networks:
-      - overlay
+      - noodle-factory
 
 networks:
-  overlay:
+  noodle-factory:
       driver: bridge
