@@ -10,7 +10,6 @@ import AuthorizationService from '../services/authorization.service';
 import { ApiOAuth2, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Translation } from '../entity/translation.entity';
 import { ProjectLocale } from '../entity/project-locale.entity';
-import noodlefactoryIntegration from '../integrations/noodlefactory.integration';
 
 @Controller('api/v1/projects/:projectId/terms')
 @UseGuards(AuthGuard())
@@ -34,14 +33,18 @@ export default class TermController {
     const user = this.auth.getRequestUserOrClient(req);
     const membership = await this.auth.authorizeProjectAction(user, projectId, ProjectAction.ViewTerm);
 
-    const terms = await noodlefactoryIntegration.getTerms()
+    const terms = await this.termRepo.find({
+      where: { project: { id: membership.project.id } },
+      order: { value: 'ASC' },
+      relations: ['labels'],
+    });
 
     const data = terms.map(t => ({
-      id: t.value,
+      id: t.id,
       value: t.value,
       context: t.context,
-      labels: [],
-      date: new Date(),
+      labels: t.labels,
+      date: t.date,
     }));
 
     return {
