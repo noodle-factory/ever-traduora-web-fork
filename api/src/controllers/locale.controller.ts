@@ -5,7 +5,6 @@ import { Repository } from 'typeorm';
 import { Locale } from '../entity/locale.entity';
 import { ApiOAuth2, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ListLocalesResponse } from '../domain/http';
-import noodlefactoryIntegration from '../integrations/noodlefactory.integration';
 
 @Controller('api/v1/locales')
 @UseGuards(AuthGuard())
@@ -19,7 +18,7 @@ export default class LocaleController {
   @ApiResponse({ status: HttpStatus.OK, description: 'Success', type: ListLocalesResponse })
   @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Unauthorized' })
   async find(@Req() req) {
-    const locales = await noodlefactoryIntegration.getLanguages();
+    const locales = await this.localeRepo.find({ take: 1000 });
     return {
       data: locales.map(l => ({
         code: l.code,

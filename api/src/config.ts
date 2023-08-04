@@ -61,9 +61,4 @@ export const config = {
       migrations: ['src/migrations/*'],
     } as TypeOrmModuleOptions,
   },
-  integrations: {
-    noodlefactory: {
-      baseUrl: env.NF_BASE_URL || ''
-    }
-  }
 };

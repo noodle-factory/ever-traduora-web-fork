@@ -19,7 +19,6 @@ import { Project } from '../entity/project.entity';
 import { Term } from '../entity/term.entity';
 import { Translation } from '../entity/translation.entity';
 import AuthorizationService from '../services/authorization.service';
-import noodlefactoryIntegration from '../integrations/noodlefactory.integration';
 
 @Controller('api/v1/projects/:projectId/translations')
 @UseGuards(AuthGuard())
@@ -43,20 +42,17 @@ export default class TranslationController {
   async find(@Req() req, @Param('projectId') projectId: string) {
     const user = this.auth.getRequestUserOrClient(req);
     const membership = await this.auth.authorizeProjectAction(user, projectId, ProjectAction.ViewTranslation);
-    const locales = await noodlefactoryIntegration.getLanguages();
+    const locales = await this.projectLocaleRepo.find({
+      where: {
+        project: membership.project,
+      },
+      relations: ['locale'],
+    });
+
     return {
-      data: locales.map(l => ({
-        "id": l.code,
-        "date": {
-            "created": new Date(),
-            "modified": new Date()
-        },
-        "locale": {
-            "code": l.code,
-            "region": l.region,
-            "language": l.language
-        }
-      })),
+      data: _.chain(locales)
+        .map(v => _.pick(v, ['id', 'date', 'locale.code', 'locale.region', 'locale.language']))
+        .value(),
     };
   }
 
@@ -126,17 +122,31 @@ export default class TranslationController {
     const user = this.auth.getRequestUserOrClient(req);
     const membership = await this.auth.authorizeProjectAction(user, projectId, ProjectAction.ViewTranslation);
 
-    const translations = await noodlefactoryIntegration.getTranslation(localeCode)
-    const result = Object.keys(translations).map(key => ({ 
-      termId: key,
-      value: translations[key],
-      labels: [],
-      date: new Date()
-    }));
-
-    return { 
-      data: result 
-    };
+    try {
+      // Ensure locale is requested project locale
+      const projectLocale = await this.projectLocaleRepo.findOneOrFail({
+        where: {
+          project: membership.project,
+          locale: {
+            code: localeCode,
+          },
+        },
+      });
+      try {
+        const translations = await this.translationRepo.find({
+          where: {
+            projectLocale,
+          },
+          relations: ['term', 'labels'],
+        });
+        const result = translations.map(t => ({ termId: t.term.id, value: t.value, labels: t.labels, date: t.date }));
+        return { data: result };
+      } catch (error) {
+        throw new NotFoundException('project translation not found');
+      }
+    } catch (error) {
+      throw new NotFoundException('project locale not found');
+    }
   }
 
   @Patch(':localeCode')
@@ -154,25 +164,57 @@ export default class TranslationController {
     const user = this.auth.getRequestUserOrClient(req);
     await this.auth.authorizeProjectAction(user, projectId, ProjectAction.EditTranslation);
 
-    let translations = {
-      [payload.termId]: payload.value
-    };
-
     try {
-      noodlefactoryIntegration.updateTranslation(
-        localeCode,
-        translations
-      );
-      return {
-        data: {
-          termId: payload.termId,
-          value: payload.value,
-          labels: [],
-          date: new Date(),
+      const projectLocale = await this.projectLocaleRepo.findOneOrFail({
+        where: {
+          locale: {
+            code: localeCode,
+          },
+          project: {
+            id: projectId,
+          },
         },
-      };
+      });
+      try {
+        const term = await this.termRepo.findOneOrFail({
+          where: {
+            project: { id: projectId },
+            id: payload.termId,
+          },
+          relations: ['labels'],
+        });
+        let translation = await this.translationRepo.findOne({
+          where: {
+            termId: term.id,
+            projectLocale: projectLocale,
+          },
+          relations: ['labels'],
+        });
+        if (translation) {
+          translation.value = payload.value;
+        } else {
+          translation = this.translationRepo.create({
+            value: payload.value,
+            projectLocale,
+            term,
+            labels: term.labels, // Copy term labels on creation
+          });
+        }
+
+        await this.translationRepo.save(translation);
+        return {
+          data: {
+            termId: term.id,
+            value: translation.value,
+            labels: translation.labels,
+            date: translation.date,
+          },
+        };
+      } catch (error) {
+        throw new NotFoundException('project term not found');
+      }
     } catch (error) {
-      throw new NotFoundException('project term not found');
+      throw new NotFoundException('project locale not found');
     }
   }
 
