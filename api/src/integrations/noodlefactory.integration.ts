@@ -8,7 +8,20 @@ class NoodleFactoryIntegration extends BaseIntegration {
   async fetchData(endpoint: string) {
     try {
       const response = await axios.get(`${this.baseUrl}${endpoint}`);
-      console.log(response)
+      console.log(response);
+      return response.data;
+    } catch (error) {
+      throw new Error(`Error fetching data: ${error.message}`);
+    }
+  }
+
+  async postData(endpoint: string, data: any) {
+    try {
+      const response = await axios.patch(
+        `${this.baseUrl}${endpoint}`,
+        data
+      );
+      console.log(response);
       return response.data;
     } catch (error) {
       throw new Error(`Error fetching data: ${error.message}`);
@@ -37,6 +50,14 @@ class NoodleFactoryIntegration extends BaseIntegration {
 
   async getTranslation(language_code: string) {
     const data = await this.fetchData(`/locales/${language_code}`);
+    return data.data;
+  }
+
+  async updateTranslation(language_code: string, translations: any) {
+    const data = await this.postData(
+      `/locales/${language_code}`,
+      translations
+    );
     return data.data;
   }
 }
