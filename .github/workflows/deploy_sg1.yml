@@ -1,0 +1,18 @@
+name: Deploy to SG1
+on:
+  release:
+    types:
+      - created
+
+jobs:
+  deploy:
+    if: startsWith(github.event.release.name, 'release-nf-sg1') && github.event.release.target_commitish == 'release'
+    name: Deploy to the SG1
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ENVIRONMENT: "production"
+      CLUSTER_ALIAS: "nf-sg1"
+      AWS_REGION: "ap-southeast-1"
+      EKS_CLUSTER_NAME: "noodlefactory-v2-cluster"
+      RELEASE_TAG: ${{ github.event.release.name }}
+    secrets: inherit

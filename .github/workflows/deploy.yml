@@ -1,0 +1,102 @@
+name: deploy on demand
+
+on:
+  workflow_call:
+    inputs:
+      ENVIRONMENT:
+        required: true
+        type: string
+      RELEASE_TAG:
+        required: true
+        type: string
+      AWS_REGION:
+        required: true
+        type: string
+      CLUSTER_ALIAS:
+        required: true
+        type: string
+      EKS_CLUSTER_NAME:
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.ENVIRONMENT }} at ${{ inputs.CLUSTER_ALIAS }}
+    runs-on: self-hosted
+    environment: ${{ inputs.ENVIRONMENT }}-${{ inputs.CLUSTER_ALIAS }}
+    steps:
+
+      - name: get sha_short from GITHUB_SHA ${{ github.sha }}
+        id: vars
+        run: echo "::set-output name=sha_short::${GITHUB_SHA::7}"
+
+      - name: Start deploy tag ${{ inputs.RELEASE_TAG }} (${{ steps.vars.outputs.sha_short }}) to ${{ inputs.CLUSTER_ALIAS }}
+        run: echo "Start deploy release ${{ inputs.RELEASE_TAG }} (${{ steps.vars.outputs.sha_short }}) to ${{ inputs.CLUSTER_ALIAS }}"
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ inputs.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Re-tag image to RELEASE_TAG before deploy to production
+        if: inputs.ENVIRONMENT == 'production'
+        env:
+          IMAGE_NAME: ${{ secrets.ECR_REGISTRY_URI }}/${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: release-latest
+          RELEASE_TAG: ${{ inputs.RELEASE_TAG }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        run: |
+          MANIFEST=$(aws ecr batch-get-image --region ap-southeast-1 --repository-name $ECR_REPOSITORY --image-ids imageTag=$IMAGE_TAG --output json | jq --raw-output --join-output '.images[0].imageManifest')
+          aws ecr put-image --region ap-southeast-1 --repository-name $ECR_REPOSITORY --image-tag $RELEASE_TAG --image-manifest "$MANIFEST" || echo 'Ignore duplicate tagging error'
+
+      - name: Load secret from Secrets manager to deployment config file.
+        id: deploy-step-1
+        env:
+          ENVIRONMENT_NAME: ${{ inputs.ENVIRONMENT }}
+          AWS_REGION: ${{ inputs.AWS_REGION }}
+          CONTAINER_IMAGE: ${{ secrets.ECR_REGISTRY_URI }}/${{ secrets.ECR_REPOSITORY }}:${{ steps.vars.outputs.sha_short }}
+        run: |
+          aws secretsmanager get-secret-value --secret-id "noodlefactory/deployment/${{ secrets.ECR_REPOSITORY }}-${{ inputs.ENVIRONMENT }}" > secret_string || echo 'ignoring error'
+          if [ -s secret_string ] ; then
+            cat secret_string | python3 -c "import sys, json; a = json.loads(json.load(sys.stdin)['SecretString']); print('\n'.join(['export ' + k + '=\"' + v.replace('\\\"', '\\\\\"') + '\"' for k, v in a.items()]))" > secret.env && . secret.env && rm -f secret.env ;
+          else
+            echo "No secret" ;
+          fi
+          envsubst < deployment/${ENVIRONMENT_NAME}-deployment.yaml > deployment.yaml
+#          cat deployment.yaml
+
+      - name: Apply to EKS cluster ${{ inputs.EKS_CLUSTER_NAME }}
+        id: deploy-step-2
+        run: |
+          CREDENTIALS=$(aws sts assume-role --role-arn ${{ secrets.EKS_KUBECTL_ROLE_ARN }} --role-session-name codebuild-kubectl --duration-seconds 900)
+          export AWS_ACCESS_KEY_ID="$(echo ${CREDENTIALS} | jq -r '.Credentials.AccessKeyId')"
+          export AWS_SECRET_ACCESS_KEY="$(echo ${CREDENTIALS} | jq -r '.Credentials.SecretAccessKey')"
+          export AWS_SESSION_TOKEN="$(echo ${CREDENTIALS} | jq -r '.Credentials.SessionToken')"
+          export AWS_EXPIRATION=$(echo ${CREDENTIALS} | jq -r '.Credentials.Expiration')
+          export AWS_REGION=${{ inputs.AWS_REGION }}
+          aws eks update-kubeconfig --name ${{ inputs.EKS_CLUSTER_NAME }}
+          curl -sS -o kubectl https://amazon-eks.s3-us-west-2.amazonaws.com/1.14.6/2019-08-22/bin/linux/amd64/kubectl
+          chmod +x ./kubectl
+          export PATH=$PWD/:$PATH
+          kubectl apply -f deployment.yaml
+
+      - name: Deployment fallback, undo image tagging if the deployment failed
+        if: steps.deploy-step-1.outputs.failure == 'true' || steps.deploy-step-2.outputs.failure == 'true'
+        run: |
+          aws ecr batch-delete-image --repository-name ${{ secrets.ECR_REPOSITORY }} --image-ids imageTag=${{ inputs.RELEASE_TAG }}
+
+#      - name: verify deployment
+#        uses: kodermax/kubectl-aws-eks@master
+#        env:
+#          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+#        with:
+#          args: rollout status deployment/my-app

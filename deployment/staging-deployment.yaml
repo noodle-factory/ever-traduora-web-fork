@@ -1,0 +1,57 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: ever-traduora-web-${ENVIRONMENT_NAME}
+  labels:
+    app: ever-traduora-web-${ENVIRONMENT_NAME}
+spec:
+  selector:
+    app: ever-traduora-web-${ENVIRONMENT_NAME}
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: NodePort
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ever-traduora-web-${ENVIRONMENT_NAME}
+  labels:
+    app: ever-traduora-web-${ENVIRONMENT_NAME}
+spec:
+  selector:
+    matchLabels:
+      app: ever-traduora-web-${ENVIRONMENT_NAME}
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ever-traduora-web-${ENVIRONMENT_NAME}
+    spec:
+      containers:
+        - name: ever-traduora-web-${ENVIRONMENT_NAME}
+          image: ${CONTAINER_IMAGE}
+          imagePullPolicy: Always
+          env:
+            - name: ENV
+              value: "${ENVIRONMENT_NAME}"
+            - name: TR_PORT
+              value: "${TR_PORT}"
+            - name: TR_AUTH_TOKEN_EXPIRE
+              value: "${TR_AUTH_TOKEN_EXPIRE}"
+            - name: TR_DB_DATABASE
+              value: "${TR_DB_DATABASE}"
+            - name: TR_DB_HOST
+              value: "${TR_DB_HOST}"
+            - name: TR_DB_PORT
+              value: "${TR_DB_PORT}"
+            - name: TR_DB_USER
+              value: "${TR_DB_USER}"
+            - name: TR_MAIL_DEBUG
+              value: "${TR_MAIL_DEBUG}"
+
+          ports:
+            - name: http
+              containerPort: 8080

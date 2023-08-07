@@ -72,23 +72,6 @@ spec:
                name: traduora
            - secretRef:
                name: traduora
-        - name: mysql
-          image: mysql:5.7
-          imagePullPolicy: Always
-          ports:
-            - name: mysql
-              containerPort: 3306
-              protocol: TCP
-          resources:
-            limits:
-              cpu: 500m
-              memory: 256Mi
-            requests:
-              cpu: 50m
-              memory: 64Mi
-          envFrom:
-            - secretRef:
-                name: traduora
 
 
 ---
@@ -102,25 +85,8 @@ metadata:
 data:
   TR_PORT: "8080"
   TR_AUTH_TOKEN_EXPIRE: "8600"
-  TR_DB_DATABASE: "traduora_preview"
-  TR_DB_HOST: "traduora-mysqldb"
+  TR_DB_DATABASE: "traduora"
+  TR_DB_HOST: "nf-mysql8-micro.cyv2ovwbmiph.ap-southeast-1.rds.amazonaws.com"
   TR_DB_PORT: "3306"
   TR_DB_USER: "root"
   TR_MAIL_DEBUG: "false"
-
-
-# DO NOT USE THESE SECRETS IN PRODUCTION
-# These are meant for preview purposes only!
----
-apiVersion: v1
-kind: Secret
-metadata:
-    name: traduora
-    namespace: traduora-preview
-    labels:
-      app: traduora
-stringData:
-    TR_SECRET: tJW4Js889dxjr3KLueEQ4cfSTfm0JfiabLpX/ouBrd0=
-    TR_DB_PASSWORD: pNGWiZR6dRI/MEgdRsk4976ucuVwRT0WhChTihe5nDQ=
-    MYSQL_ROOT_PASSWORD: pNGWiZR6dRI/MEgdRsk4976ucuVwRT0WhChTihe5nDQ=
-    MYSQL_DATABASE: traduora_preview

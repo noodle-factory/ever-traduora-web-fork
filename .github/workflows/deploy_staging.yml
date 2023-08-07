@@ -1,0 +1,22 @@
+name: Deploy to staging
+
+on:
+  workflow_run:
+    workflows: ["Build and push image to ECR"]
+    types:
+      - completed
+    branches:
+      - master
+
+jobs:
+  deploy-to-staging:
+    if: github.ref_name == 'master' && github.event.workflow_run.conclusion == 'success'
+    name: Deploy to the staging
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ENVIRONMENT: "staging"
+      CLUSTER_ALIAS: "nf-sg1"
+      AWS_REGION: "ap-southeast-1"
+      RELEASE_TAG: "staging"
+      EKS_CLUSTER_NAME: "noodlefactory-v2-cluster"
+    secrets: inherit
